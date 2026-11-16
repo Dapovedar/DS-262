@@ -1,0 +1,280 @@
+\documentclass[11pt,a4paper]{article}
+\usepackage[utf8]{inputenc}
+\usepackage[T1]{fontenc}
+\usepackage{lmodern,amsmath}
+\usepackage[margin=2.3cm]{geometry}
+\usepackage{booktabs,array,longtable,xcolor,fancyhdr,hyperref,listings,enumitem,tabularx}
+\definecolor{unal}{HTML}{2E6B34}
+\hypersetup{colorlinks=true,linkcolor=unal,urlcolor=unal}
+\pagestyle{fancy}\fancyhf{}
+\fancyhead[L]{\textbf{Estructuras de Datos}}\fancyhead[R]{Proyecto Semestral -- Entrega 2}
+\fancyfoot[C]{Página \thepage}
+\setlength{\parindent}{0pt}\setlength{\parskip}{5pt}
+\lstset{basicstyle=\ttfamily\footnotesize,frame=single,breaklines=true,columns=fullflexible,
+ literate={á}{{\'a}}1 {é}{{\'e}}1 {í}{{\'i}}1 {ó}{{\'o}}1 {ú}{{\'u}}1 {ñ}{{\~n}}1 {Á}{{\'A}}1 {É}{{\'E}}1 {Í}{{\'I}}1 {Ó}{{\'O}}1 {Ú}{{\'U}}1}
+
+\begin{document}
+\begin{center}
+{\large\textbf{UNIVERSIDAD NACIONAL DE COLOMBIA}}\\ Facultad de Ingeniería\\[4pt]
+{\Large\textbf{Estructuras de Datos}}\\[2pt]
+{\color{unal}\textbf{Proyecto Semestral -- Entrega 2}}\\
+Desarrollo, Integración y Evaluación Parcial\\[6pt]
+\rule{\linewidth}{0.8pt}
+\end{center}
+
+\begin{tabularx}{\linewidth}{@{}lXlX@{}}
+\textbf{Docente:} & Sebastián Yepes García & \textbf{Semestre:} & 2026-2\\
+\textbf{Fecha límite:} & 15 de noviembre de 2026 & \textbf{Valor:} & 10\,\%\\
+\end{tabularx}
+
+\vspace{4pt}
+\begin{center}
+{\LARGE\textbf{Sistema de Asignación Prioritaria de Camas en la Unidad de Cuidados Intensivos del Hospital Universitario Nacional de Colombia}}
+\end{center}
+
+\textbf{Autores} (Universidad Nacional de Colombia, Facultad de Ingeniería):\\
+\begin{tabular}{@{}l@{}}
+Daniel Poveda\\
+Daniel Morales\\
+John Diaz\\
+\end{tabular}
+
+\section{Correcciones de la primera entrega}
+La Entrega 1 fue el sistema \emph{Residencias UNAL}: asignación de cupos de residencia según un puntaje socioeconómico (menor puntaje = mayor prioridad), con un árbol binario de búsqueda (ABB) propio de clave $(\text{puntaje},\text{ID})$, un \texttt{HashMap} por ID y un \texttt{ArrayList} para los listados. Esta entrega conserva \textbf{la misma arquitectura} y la aplica a un dominio con más reglas: la asignación de camas UCI por índice de gravedad. Los cambios respecto de la Entrega 1 son:
+
+\begin{longtable}{@{}p{0.27\linewidth}p{0.33\linewidth}p{0.33\linewidth}@{}}
+\toprule \textbf{Aspecto} & \textbf{Entrega 1} & \textbf{Entrega 2}\\ \midrule \endhead
+Dominio & Residencias (estudiantes) & Camas UCI (pacientes)\\
+Prioridad & puntaje socioeconómico & índice de gravedad (0--100)\\
+Árbol & ABB sobre \texttt{Estudiante}, recursivo & ABB genérico \texttt{ArbolBinarioBusqueda<T>}; inserción, inorden y altura iterativos\\
+Asignación & primeros $N$ del inorden & primeros $N$ del inorden con \textbf{cola de camas libres}: quien ya tenía cama y sigue entre los $N$ primeros la conserva\\
+Acceso & menú de consola & \textbf{login} (paciente: ID; funcionario: ID y clave), interfaz gráfica y consola\\
+Datos & en memoria & \textbf{persistencia} en archivos CSV y \texttt{properties}\\
+Validación & básica & campos condicionados (solo números/solo letras) en la interfaz y en el modelo\\
+Seguridad & -- & claves como \texttt{salt\$SHA-256}, bloqueo tras 3 intentos\\
+Pruebas & ejecución manual & 106 pruebas automáticas y benchmark\\
+\bottomrule
+\end{longtable}
+El cambio de dominio se hizo para dar más peso a las reglas de prioridad y a la reasignación dinámica (empeoramiento, mejoría y alta de pacientes), manteniendo las estructuras de datos y los algoritmos de la Entrega 1.
+
+\section{Resumen actualizado}
+Las unidades de cuidados intensivos tienen pocas camas y más pacientes críticos que cupos. Se desarrolló un sistema en Java que registra pacientes con un índice de gravedad (menor índice = mayor urgencia), mantiene una lista de prioridad y asigna las $N$ camas disponibles a los más urgentes, con lista de espera. Se emplean un árbol binario de búsqueda propio, ordenado por $(\text{índice},\text{ID})$, un \texttt{HashMap} por ID y una cola de camas libres. Registrar, actualizar el índice y dar de alta cuestan $O(h)$ ($h$ = altura del árbol), buscar por ID $O(1)$ promedio y asignar $O(n)$. El sistema es funcional: login, interfaz gráfica, validaciones, base de datos en archivos y 106 pruebas que pasan. Con datos aleatorios la altura del árbol crece como $O(\log n)$ y con datos ordenados degenera a $O(n)$, lo que motiva usar un árbol balanceado (AVL) en la entrega final.
+
+\section{Introducción, objetivos y alcance}
+\subsection{Contexto y problema}
+En cuidados intensivos la demanda de camas puede superar la oferta, y el estado de un paciente cambia con el tiempo. El sistema debe decidir con rapidez quién tiene prioridad, reflejar cambios de gravedad y altas, y permitir a cada paciente consultar su estado. Las dificultades computacionales son: mantener un orden por prioridad con inserciones, eliminaciones y reubicaciones frecuentes; resolver empates de forma determinista; y tener acceso directo por identificación.
+
+\emph{Aclaración:} el índice de gravedad es un número académico y ficticio que representa la urgencia; no corresponde a una escala clínica real ni el sistema pretende usarse en un hospital. Los datos son inventados.
+
+\subsection{Objetivos}
+\textbf{General.} Diseñar e implementar un sistema que asigne camas UCI de forma prioritaria usando estructuras de datos apropiadas y analizar el costo de sus operaciones.
+
+\textbf{Específicos (verificables).}
+\begin{enumerate}[nosep]
+\item Implementar un ABB genérico propio con inserción, eliminación, búsqueda e inorden; verificado con pruebas, incluida una comparación aleatoria contra el estado esperado.
+\item Resolver empates de índice con la clave $(\text{índice},\text{ID})$ (prueba de desempate).
+\item Acceder y validar pacientes y funcionarios por ID en $O(1)$ promedio.
+\item Asignar $N$ camas por prioridad y reasignar tras cambios de índice, altas o cambio del número de camas.
+\item Controlar el acceso: paciente con ID, funcionario con ID y clave.
+\item Validar la entrada de datos y persistir la información entre ejecuciones.
+\item Medir la altura del árbol y los tiempos para distintos tamaños de entrada.
+\end{enumerate}
+
+\subsection{Alcance y limitaciones}
+\textbf{Dentro del alcance:} registro, consulta por ID, actualización de índice, alta, definición de camas (1--30), asignación, listas con cama y en espera, login, interfaz gráfica y de consola, persistencia en archivos, pruebas.\\
+\textbf{Fuera del alcance:} base de datos relacional, servidor o red, historia clínica real, cálculo clínico del índice, múltiples unidades, balanceo del árbol (planeado para la Entrega 3).\\
+\textbf{Supuestos:} el índice lo ingresa el personal; el ID es numérico de 5 a 12 dígitos; hay un único hilo de ejecución; la capacidad máxima es de 30 camas.\\
+\textbf{Restricciones técnicas:} Java 17 o superior, sin librerías externas; la reasignación no se ejecuta sola: tras un cambio el funcionario debe ejecutar la asignación (el sistema avisa que hay cambios pendientes).
+
+\subsection{Requerimientos principales}
+\begin{longtable}{@{}lp{0.62\linewidth}p{0.2\linewidth}@{}}
+\toprule \textbf{Id} & \textbf{Requerimiento} & \textbf{Rol}\\ \midrule \endhead
+RF1 & Iniciar sesión: paciente con ID; funcionario con ID y clave; el ID debe existir en su base de datos & Todos\\
+RF2 & Registrar paciente con ID único, nombre, diagnóstico e índice (0--100) & Funcionario\\
+RF3 & Consultar un paciente por ID y confirmar si existe en la base de datos & Funcionario\\
+RF4 & Listar pacientes por prioridad (índice creciente, desempate por ID) & Funcionario\\
+RF5 & Definir la cantidad de camas disponibles (1--30) & Funcionario\\
+RF6 & Asignar camas a los $N$ más urgentes y mostrar lista con cama y lista de espera & Funcionario\\
+RF7 & Actualizar el índice de un paciente y reubicarlo automáticamente & Funcionario\\
+RF8 & Dar de alta (eliminar) a un paciente & Funcionario\\
+RF9 & Consultar el estado propio: cama asignada, ubicación, posición e índice & Paciente\\
+RF10 & Validar campos: ID y índice solo números; nombre y diagnóstico solo letras & Todos\\
+RF11 & Guardar y recuperar los datos entre ejecuciones & Sistema\\
+\bottomrule
+\end{longtable}
+
+\section{Trabajo relacionado}
+\textbf{Estructuras de datos.} Los árboles binarios de búsqueda y sus costos en función de la altura se tratan en textos clásicos de algoritmos \cite{cormen,sedgewick}. El AVL, primer árbol de búsqueda autobalanceado, garantiza altura $O(\log n)$ \cite{avl}; es la mejora prevista de este proyecto. Las tablas hash con encadenamiento y su análisis de costo promedio se explican en \cite{cormen}. Las colas de prioridad con montículo (heap) son la alternativa habitual para extraer el elemento de mayor prioridad \cite{cormen}; se discute en la sección~\ref{sec:ed}.
+
+\textbf{Priorización clínica.} En la práctica hospitalaria la gravedad se estima con escalas como SOFA \cite{sofa} o APACHE II \cite{apache}, y la urgencia de ingreso con sistemas de triaje. Este proyecto no implementa ninguna de ellas: modela el problema computacional de ordenar y asignar por un índice numérico dado, que podría provenir de una escala real en un trabajo futuro.
+
+\textbf{Sistemas de asignación.} El patrón (recurso escaso, prioridad numérica, cambios dinámicos de prioridad) es el mismo de la Entrega 1 y de problemas de programación por prioridad. La diferencia de este trabajo es soportar \emph{modificar y retirar} elementos arbitrarios, lo que un heap simple no permite sin estructuras auxiliares.
+
+\section{Metodología y diseño actualizado}
+\subsection{Arquitectura}
+El código se organiza en paquetes con responsabilidades separadas:
+\begin{longtable}{@{}p{0.27\linewidth}p{0.65\linewidth}@{}}
+\toprule \textbf{Paquete} & \textbf{Contenido}\\ \midrule
+\texttt{modelo} & \texttt{Paciente}, \texttt{Funcionario}, \texttt{Cama}, \texttt{Validador}\\
+\texttt{estructuras} & \texttt{ArbolBinarioBusqueda<T>} y \texttt{Nodo<T>} (implementados desde cero)\\
+\texttt{servicio} & \texttt{SistemaUCI} (lógica), \texttt{Autenticacion}, \texttt{Seguridad}, \texttt{Aplicacion}, \texttt{ResultadoAsignacion}\\
+\texttt{persistencia} & \texttt{RepositorioCSV} (pacientes, funcionarios, configuración)\\
+\texttt{ui} & Interfaz gráfica Swing y \texttt{ConsolaUCI}\\
+\bottomrule
+\end{longtable}
+\textbf{Flujo de información:} la interfaz (o consola) valida los datos y llama a \texttt{SistemaUCI}; este mantiene sincronizados el \texttt{HashMap} y el ABB sobre los mismos objetos \texttt{Paciente} y guarda cada cambio en \texttt{RepositorioCSV}.
+
+\subsection{Equivalencia con la Entrega 1}
+\begin{tabular}{@{}ll@{}}
+\toprule \textbf{Residencias UNAL} & \textbf{Camas UCI}\\ \midrule
+Estudiante & Paciente\\
+Puntaje socioeconómico & Índice de gravedad\\
+Cupos & Camas disponibles\\
+\texttt{SistemaResidencias} & \texttt{SistemaUCI}\\
+Modificar puntaje & Actualizar índice\\
+Eliminar estudiante & Alta médica\\
+\bottomrule
+\end{tabular}
+
+\subsection{Orden de los pacientes}
+La comparación es por índice y, si empatan, por ID:
+\begin{lstlisting}
+compareTo(otro):
+    c = Integer.compare(this.indiceGravedad, otro.indiceGravedad)
+    if c != 0: return c
+    return this.id.compareTo(otro.id)
+\end{lstlisting}
+
+\subsection{Asignación de camas (pseudocódigo)}
+\begin{lstlisting}
+asignar():
+    orden = arbol.enOrden()                 // O(n)
+    ganadores = primeros min(camas, n) de orden
+    para cada paciente p en orden:
+        si p tiene cama:
+            si p esta en ganadores y p.cama <= camas: marcar cama ocupada
+            sino: p.cama = 0                // pierde la cama
+    libres = cola de camas no ocupadas      // O(camas)
+    para cada p en ganadores sin cama:
+        p.cama = libres.sacar()             // O(1)
+\end{lstlisting}
+\subsection{Actualizar el índice}
+\begin{lstlisting}
+modificarIndice(id, nuevo):
+    p = hash.get(id)                        // O(1)
+    validar(nuevo)                          // antes de tocar el arbol
+    arbol.eliminar(p)                       // con la clave VIEJA, O(h)
+    p.indice = nuevo
+    arbol.insertar(p)                       // con la clave nueva, O(h)
+\end{lstlisting}
+Cambiar el índice con el paciente aún dentro del árbol corrompería el orden, porque el índice forma parte de la clave.
+
+\subsection{Ejemplo de funcionamiento}
+Pacientes: Ana Torres 35, Carlos Pérez 12, Laura Gómez 48, Juan Díaz 12, Valentina Ruiz 60, Andrés Mora 22. Este caso se ejecutó con el código y los resultados son los reportados:
+\begin{enumerate}[nosep]
+\item Orden: Carlos (12), Juan (12, gana el ID menor), Andrés (22), Ana (35), Laura (48), Valentina (60). Altura del ABB: 4.
+\item Con 3 camas: UCI-01 Carlos, UCI-02 Juan, UCI-03 Andrés; el resto queda en espera.
+\item Valentina empeora de 60 a 8: pasa de la posición 6 a la 1 y recibe la UCI-03; Andrés pasa a la lista de espera.
+\item Alta de Carlos: queda libre la UCI-01 y la ocupa Andrés. Ana queda 4.ª de 5, en espera.
+\end{enumerate}
+
+\section{Estructuras de datos y algoritmos}\label{sec:ed}
+\begin{longtable}{@{}p{0.2\linewidth}p{0.18\linewidth}p{0.55\linewidth}@{}}
+\toprule \textbf{Estructura} & \textbf{Clave} & \textbf{Qué representa y por qué se usa}\\ \midrule \endhead
+ABB propio genérico & (índice, ID) & Lista de prioridad ordenada. Se modifica y se retira cualquier paciente sin reordenar todo; el inorden entrega el orden creciente\\
+\texttt{HashMap} & ID & Existencia y acceso directo por ID; evita duplicados. También usado para los funcionarios\\
+Cola (\texttt{ArrayDeque}) & -- & Camas libres durante la asignación: se reparten en $O(1)$ cada una\\
+\texttt{ArrayList} & -- & Listados devueltos por el recorrido inorden\\
+\bottomrule
+\end{longtable}
+\textbf{Interacción.} \texttt{SistemaUCI} guarda el mismo objeto \texttt{Paciente} en el \texttt{HashMap} y en el ABB. El \texttt{HashMap} localiza al paciente y el árbol lo reubica; ambos deben quedar sincronizados (hay una verificación de consistencia en las pruebas).
+
+\textbf{Costos} ($n$ pacientes, $h$ altura del ABB).
+\begin{center}
+\begin{tabular}{@{}lll@{}}
+\toprule \textbf{Operación} & \textbf{Costo} & \textbf{Observación}\\ \midrule
+Registrar & $O(h)$ & hash $O(1)$ + inserción en el ABB\\
+Buscar por ID & $O(1)$ prom. & solo la tabla hash\\
+Actualizar índice & $O(h)$ & eliminar + reinsertar\\
+Dar de alta & $O(h)$ & hash y ABB\\
+Listar ordenado & $O(n)$ & inorden\\
+Asignar $N$ camas & $O(n)$ & inorden + cola de camas libres\\
+Posición de un paciente & $O(n)$ & recorrido inorden\\
+\bottomrule
+\end{tabular}
+\end{center}
+Con datos aleatorios $h=O(\log n)$ en promedio; si los índices llegan ordenados el árbol se vuelve una lista y $h=n$ (sección~\ref{sec:res}).
+
+\textbf{Alternativas consideradas.}
+\begin{itemize}[nosep]
+\item \emph{Min-heap:} da el más urgente en $O(1)$, pero no lista en orden ni permite eliminar o reubicar un paciente cualquiera sin una estructura auxiliar. Se descartó.
+\item \emph{Lista o arreglo ordenado:} insertar y eliminar cuesta $O(n)$.
+\item \emph{AVL:} garantiza $O(\log n)$; no se incluyó aún y es la mejora prevista (el \texttt{compareTo} y la clave se reutilizan sin cambios).
+\end{itemize}
+\textbf{Cambio de estructura respecto de la Entrega 1:} el ABB pasó de recursivo y específico a genérico con operaciones iterativas (inserción, inorden, altura) para evitar desbordamientos de pila en árboles profundos; se agregó la cola de camas libres.
+
+\section{Implementación}
+\begin{longtable}{@{}p{0.5\linewidth}p{0.4\linewidth}@{}}
+\toprule \textbf{Funcionalidad} & \textbf{Estado}\\ \midrule \endhead
+ABB propio, \texttt{HashMap}, cola de camas & Implementado\\
+Registro, búsqueda, actualización, alta, asignación & Implementado\\
+Login de paciente y funcionario, bloqueo tras 3 fallos & Implementado\\
+Validación de campos (interfaz y modelo) & Implementado\\
+Persistencia en archivos & Implementado\\
+Interfaz gráfica y versión de consola & Implementado\\
+Pruebas automáticas y benchmark & Implementado\\
+Reasignación automática al cambiar un dato & Parcial: se ejecuta manualmente; el sistema avisa si hay cambios pendientes\\
+Posición del paciente en la lista & Implementado en $O(n)$ (podría optimizarse)\\
+Árbol balanceado (AVL) & Pendiente\\
+Reportes y estadísticas, historial de cambios & Pendiente\\
+\bottomrule
+\end{longtable}
+\textbf{Decisiones técnicas.} (1) Clave $(\text{índice},\text{ID})$ para desempatar. (2) Eliminar y reinsertar para actualizar el índice. (3) La asignación es una operación explícita y conserva la cama de quien sigue entre los $N$ primeros, para no mover pacientes innecesariamente. (4) Las claves se guardan como \texttt{salt\$SHA-256}. (5) Guardado seguro: se escribe un archivo temporal que luego reemplaza al original.
+
+\section{Pruebas}
+Se ejecutan con \texttt{pruebas.bat} (o \texttt{pruebas.sh}) y no requieren librerías externas.
+\begin{center}
+\begin{tabular}{@{}lrp{0.55\linewidth}@{}}
+\toprule \textbf{Conjunto} & \textbf{Pruebas} & \textbf{Qué cubren}\\ \midrule
+\texttt{PruebasSistema} & 85 & ABB (hoja, un hijo, dos hijos, vacío, degeneración, desempate), validaciones, registro, ID repetido, modificación, alta, asignación (más camas que pacientes, reducción de camas, desplazamiento), seguridad, persistencia y la base de ejemplo (50 pacientes, 5 funcionarios)\\
+\texttt{PruebasInterfaz} & 21 & Filtros de teclado, login de paciente y funcionario, registro, búsqueda, actualización y asignación desde la interfaz sin pantalla\\
+\bottomrule
+\end{tabular}
+\end{center}
+Resultado en el entorno de desarrollo: 85 de 85 y 21 de 21 pruebas correctas. Entre los casos límite y entradas inválidas probados están: ID con letras, muy corto o muy largo; nombre con números o símbolos; índice menor que 0 o mayor que 100; 0 y 31 camas; ID inexistente y repetido; clave incorrecta y cuenta bloqueada; un índice inválido no daña el árbol.
+
+\section{Resultados preliminares}\label{sec:res}
+Se midió el árbol con \texttt{uci.Benchmark} (una corrida, Java 21, 1 CPU; los tiempos dependen del equipo y se dan solo como orden de magnitud).
+\begin{center}
+\begin{tabular}{@{}lrrrrr@{}}
+\toprule \textbf{Datos} & $n$ & \textbf{Altura} & $\log_2 n$ & \textbf{Insertar $n$ (ms)} & \textbf{Inorden (ms)}\\ \midrule
+Aleatorios & 1\,000 & 21 & 10,0 & 0,7 & 0,09\\
+Aleatorios & 10\,000 & 29 & 13,3 & 13,4 & 1,08\\
+Aleatorios & 100\,000 & 37 & 16,6 & 232,4 & 18,18\\
+Ordenados & 1\,000 & 1\,000 & 10,0 & 1,2 & 0,01\\
+Ordenados & 5\,000 & 5\,000 & 12,3 & 27,9 & 0,02\\
+Ordenados & 20\,000 & 20\,000 & 14,3 & 883,2 & 0,19\\
+\bottomrule
+\end{tabular}
+\end{center}
+\textbf{Interpretación.} Con índices aleatorios la altura crece de forma logarítmica, aunque por encima de $\log_2 n$ (por ejemplo 37 frente a 16,6 con $n=100\,000$), como es habitual en un ABB sin balancear. Con índices ya ordenados el árbol degenera en una lista: la altura es $n$ y insertar $n$ elementos pasa de $O(n\log n)$ a $O(n^2)$ (883\,ms para $n=20\,000$ frente a 13,4\,ms para $n=10\,000$ aleatorios). El inorden es lineal en ambos casos. Este resultado justifica la mejora prevista con un AVL. En la práctica, un índice de 0 a 100 y una UCI pequeña hacen improbable ese peor caso, pero el diseño debe poder defenderlo.
+
+La base de ejemplo (50 pacientes, 12 camas) produce 12 pacientes con cama y 38 en espera, con empates de índice (15, 25, 30, 40, entre otros) para probar el desempate.
+
+\section{Estado actual y trabajo pendiente}
+\textbf{Avance:} se considera completado cerca del 80\,\% del proyecto (todas las operaciones principales, acceso, persistencia, pruebas y resultados preliminares).\\
+\textbf{Funcionalidades pendientes:} árbol balanceado (AVL), reportes y estadísticas, historial de cambios por paciente y reasignación automática.\\
+\textbf{Problemas abiertos:} degradación a $O(n)$ con datos ordenados; cálculo de la posición en $O(n)$; las claves de ejemplo están documentadas con fines académicos.\\
+\textbf{Para la entrega final:} implementar el AVL y comparar sus tiempos con los del ABB; ampliar el análisis y las pruebas con más tamaños de entrada; completar el documento con discusión y conclusiones finales.
+
+\section{Declaración de ayuda y recursos}
+El código fuente está escrito en Java y usa la biblioteca estándar (\texttt{HashMap}, \texttt{ArrayDeque}, \texttt{ArrayList}, Swing). Se utilizó un asistente de inteligencia artificial (Claude, de Anthropic) como apoyo para diseñar y redactar el código, las pruebas y este documento. El equipo revisó, ejecutó y probó el resultado, y todos los integrantes deben poder explicar su funcionamiento. El repositorio contiene el código correspondiente a esta versión del documento.
+
+\begin{thebibliography}{9}
+\bibitem{cormen} T.~H. Cormen, C.~E. Leiserson, R.~L. Rivest y C. Stein, \emph{Introduction to Algorithms}, 3.ª ed., MIT Press, 2009.
+\bibitem{sedgewick} R. Sedgewick y K. Wayne, \emph{Algorithms}, 4.ª ed., Addison-Wesley, 2011.
+\bibitem{avl} G.~M. Adelson-Velsky y E.~M. Landis, ``An algorithm for the organization of information'', \emph{Doklady Akademii Nauk SSSR}, 146(2):263--266, 1962.
+\bibitem{sofa} J.-L. Vincent et~al., ``The SOFA (Sepsis-related Organ Failure Assessment) score to describe organ dysfunction/failure'', \emph{Intensive Care Medicine}, 22(7):707--710, 1996.
+\bibitem{apache} W.~A. Knaus, E.~A. Draper, D.~P. Wagner y J.~E. Zimmerman, ``APACHE II: a severity of disease classification system'', \emph{Critical Care Medicine}, 13(10):818--829, 1985.
+\end{thebibliography}
+\end{document}
